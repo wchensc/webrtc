@@ -23,6 +23,15 @@ type RTPSender struct {
 
 	mu                     sync.RWMutex
 	sendCalled, stopCalled chan interface{}
+	onBeforeWriteRTP func(*rtp.Header)
+}
+
+// OnBeforeWriteRTP allows packets to be modified just before they're sent
+// off. This is a good place to add an RTP header extension, for example.
+func (r *RTPSender) OnBeforeWriteRTP(f func(*rtp.Header)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.onBeforeWriteRTP = f
 }
 
 // NewRTPSender constructs a new RTPSender
@@ -146,6 +155,11 @@ func (r *RTPSender) sendRTP(header *rtp.Header, payload []byte) (int, error) {
 		writeStream, err := srtpSession.OpenWriteStream()
 		if err != nil {
 			return 0, err
+		}
+
+		hdlr := r.onBeforeWriteRTP
+		if hdlr != nil {
+			hdlr(header)
 		}
 
 		return writeStream.WriteRTP(header, payload)
